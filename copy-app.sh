@@ -105,6 +105,46 @@ uninstall_hook() {
     fi
 }
 
+full_uninstall() {
+    echo "Uninstalling copy-app..."
+
+    # Remove hook and settings entry
+    local HOOK_FILE="$HOME/.claude/hooks/screenshot-app.sh"
+    local SETTINGS="$HOME/.claude/settings.json"
+
+    if [[ -f "$HOOK_FILE" ]]; then
+        rm "$HOOK_FILE"
+        echo "✓ Hook removed"
+    fi
+
+    if [[ -f "$SETTINGS" ]] && command -v jq &>/dev/null && grep -q "screenshot-app.sh" "$SETTINGS"; then
+        jq 'del(.hooks.PostToolUse[] | select(.hooks[]?.command | contains("screenshot-app.sh")))' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+        echo "✓ Hook entry removed from settings.json"
+    fi
+
+    # Remove config
+    if [[ -d "$HOME/.config/copy-app" ]]; then
+        rm -rf "$HOME/.config/copy-app"
+        echo "✓ Config removed"
+    fi
+
+    # Remove Swift helper
+    if [[ -d "$HOME/.local/share/copy-app" ]]; then
+        rm -rf "$HOME/.local/share/copy-app"
+        echo "✓ Swift helper removed"
+    fi
+
+    # Remove binary
+    local SELF_PATH="$(command -v copy-app 2>/dev/null)"
+    if [[ -n "$SELF_PATH" && -f "$SELF_PATH" ]]; then
+        rm "$SELF_PATH"
+        echo "✓ Binary removed: $SELF_PATH"
+    fi
+
+    echo ""
+    echo "copy-app uninstalled. Screenshots in ~/copyMac/screenshots were kept."
+}
+
 save_toggle() {
     local CONFIG_DIR="$HOME/.config/copy-app"
     local CONFIG_FILE="$CONFIG_DIR/config"
@@ -149,7 +189,8 @@ Options:
   -t, --title <WindowTitle> Window title substring filter (optional)
   --save [on|off]           Enable/disable auto-save, or show status
   --install-hook            Install Claude Code hook for xcodebuildmcp
-  --uninstall-hook          Remove Claude Code hook and config
+  --uninstall-hook          Remove Claude Code hook
+  --uninstall               Completely remove copy-app and all config
   -h, --help                Show this help message
 
 Examples:
@@ -266,6 +307,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --save)
             save_toggle "$2"
+            exit 0
+            ;;
+        --uninstall)
+            full_uninstall
             exit 0
             ;;
         -*)
