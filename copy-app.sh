@@ -43,7 +43,8 @@ case "$TOOL_NAME" in
         APP_PATH=$(echo "$INPUT" | jq -r '.tool_input.appPath // empty')
         [[ -n "$APP_PATH" ]] && APP_NAME=$(basename "$APP_PATH" .app);;
     mcp__xcodebuildmcp__build_run_macos|mcp__xcodebuildmcp__build_run_sim)
-        APP_PATH=$(echo "$INPUT" | jq -r '.tool_response | tostring' 2>/dev/null | grep -oE '[^/]+\.app' | head -1 | sed 's/\.app$//')
+        # Look for "App launched: /path/to/App.app" in the response
+        APP_PATH=$(echo "$INPUT" | jq -r '.tool_response | tostring' 2>/dev/null | grep -oE 'App launched: [^"]+\.app' | sed 's/App launched: //' | xargs basename 2>/dev/null | sed 's/\.app$//')
         [[ -n "$APP_PATH" ]] && APP_NAME="$APP_PATH";;
 esac
 [[ -z "$APP_NAME" ]] && exit 0
