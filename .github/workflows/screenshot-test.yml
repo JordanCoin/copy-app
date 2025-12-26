@@ -15,9 +15,13 @@ jobs:
       - name: Build copy-app
         run: swift build -c release
 
+      - name: Open Finder window
+        run: |
+          open ~
+          sleep 2
+
       - name: Test capture Finder
         run: |
-          # Finder is always running on macOS
           .build/release/copy-app Finder
           echo "✓ Captured Finder window"
 
