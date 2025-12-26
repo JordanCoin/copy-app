@@ -105,6 +105,35 @@ uninstall_hook() {
     fi
 }
 
+list_apps() {
+    local SCREENSHOT_DIR="$HOME/copyMac/screenshots"
+    local APP_NAME="$1"
+
+    if [[ ! -d "$SCREENSHOT_DIR" ]]; then
+        echo "No screenshots yet. Use copy-app --save on first."
+        exit 0
+    fi
+
+    if [[ -z "$APP_NAME" ]]; then
+        # List all app folders
+        echo "Saved apps:"
+        for dir in "$SCREENSHOT_DIR"/*/; do
+            [[ -d "$dir" ]] || continue
+            local name=$(basename "$dir")
+            local count=$(ls -1 "$dir"/*.png 2>/dev/null | wc -l | tr -d ' ')
+            echo "  $name ($count screenshots)"
+        done
+    else
+        # List screenshots for specific app
+        local APP_DIR="$SCREENSHOT_DIR/$APP_NAME"
+        if [[ ! -d "$APP_DIR" ]]; then
+            echo "No screenshots for '$APP_NAME'"
+            exit 1
+        fi
+        ls -1t "$APP_DIR"
+    fi
+}
+
 full_uninstall() {
     echo "Uninstalling copy-app..."
 
@@ -188,6 +217,7 @@ Usage:
 Options:
   -t, --title <WindowTitle> Window title substring filter (optional)
   --save [on|off]           Enable/disable auto-save, or show status
+  --apps [AppName]          List saved apps, or screenshots for an app
   --install-hook            Install Claude Code hook for xcodebuildmcp
   --uninstall-hook          Remove Claude Code hook
   --uninstall               Completely remove copy-app and all config
@@ -307,6 +337,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --save)
             save_toggle "$2"
+            exit 0
+            ;;
+        --apps)
+            list_apps "$2"
             exit 0
             ;;
         --uninstall)
