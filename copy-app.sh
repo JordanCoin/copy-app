@@ -105,18 +105,49 @@ uninstall_hook() {
     fi
 }
 
+save_toggle() {
+    local CONFIG_DIR="$HOME/.config/copy-app"
+    local CONFIG_FILE="$CONFIG_DIR/config"
+    local SAVE_DIR="$HOME/copyMac/screenshots"
+
+    case "$1" in
+        on)
+            mkdir -p "$CONFIG_DIR"
+            echo "SAVE_DIR=$SAVE_DIR" > "$CONFIG_FILE"
+            echo "✓ Auto-save enabled: $SAVE_DIR"
+            ;;
+        off)
+            if [[ -f "$CONFIG_FILE" ]]; then
+                rm "$CONFIG_FILE"
+                echo "✓ Auto-save disabled (clipboard only)"
+            else
+                echo "Auto-save is already disabled"
+            fi
+            ;;
+        *)
+            if [[ -f "$CONFIG_FILE" ]]; then
+                echo "Auto-save: ON ($SAVE_DIR)"
+            else
+                echo "Auto-save: OFF (clipboard only)"
+            fi
+            ;;
+    esac
+}
+
 show_help() {
     cat << 'HELP'
 Description:
   Capture a specific application window to the clipboard.
-  Optionally saves screenshots to disk when SAVE_DIR is configured.
+  Optionally saves screenshots to disk.
 
 Usage:
   copy-app <AppName> [-t <WindowTitle>]
+  copy-app --save [on|off]
   copy-app --install-hook | --uninstall-hook
 
 Options:
   -t, --title <WindowTitle> Window title substring filter (optional)
+  --save [on|off]           Enable/disable auto-save, or show status
   --install-hook            Install Claude Code hook for xcodebuildmcp
   --uninstall-hook          Remove Claude Code hook and config
   -h, --help                Show this help message
@@ -125,13 +156,9 @@ Examples:
   copy-app Writer                     # Capture Writer's frontmost window
   copy-app Safari                     # Capture Safari's frontmost window
   copy-app Terminal -t "server-log"   # Capture Terminal window matching title
+  copy-app --save on                  # Enable auto-save to ~/copyMac/screenshots
+  copy-app --save off                 # Disable auto-save (clipboard only)
   copy-app --install-hook             # Set up Claude Code integration
-  copy-app --uninstall-hook           # Remove Claude Code integration
-
-Configuration:
-  Create ~/.config/copy-app/config to enable auto-save:
-
-    SAVE_DIR=~/Screenshots/copy-app
 
   When SAVE_DIR is set, screenshots are saved with timestamps
   AND copied to clipboard. When unset, clipboard only.
@@ -235,6 +262,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --uninstall-hook)
             uninstall_hook
+            exit 0
+            ;;
+        --save)
+            save_toggle "$2"
             exit 0
             ;;
         -*)

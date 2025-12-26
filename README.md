@@ -37,7 +37,7 @@ cd copy-app
 ./install.sh
 ```
 
-> **First run:** Grant Accessibility permission to your terminal when prompted.
+> **First run:** Grant Accessibility permission to your terminal, then restart it.
 > System Settings → Privacy & Security → Accessibility → add your terminal app
 >
 > ![Accessibility settings](accessibility.png)
@@ -60,8 +60,9 @@ copy-app Safari -t "GitHub"
 By default, screenshots are only copied to clipboard. To also save them to disk:
 
 ```bash
-mkdir -p ~/.config/copy-app
-echo 'SAVE_DIR=~/copyMac/screenshots' > ~/.config/copy-app/config
+copy-app --save on    # Enable auto-save
+copy-app --save off   # Disable (clipboard only)
+copy-app --save       # Show current status
 ```
 
 Screenshots are organized by app: `~/copyMac/screenshots/<AppName>/AppName_2024-01-15_14-30-45.png`
@@ -73,16 +74,6 @@ Screenshots are organized by app: `~/copyMac/screenshots/<AppName>/AppName_2024-
   ```bash
   xcode-select --install
   ```
-
-## Permissions
-
-On first run, you'll need to grant **Accessibility** permission to your terminal app:
-
-1. System Settings → Privacy & Security → Accessibility
-2. Click `+` and add your terminal (Terminal.app, iTerm, Warp, etc.)
-3. Restart your terminal
-
-The script will automatically open System Settings if permission is missing.
 
 ## How It Works
 
