@@ -10,6 +10,7 @@ CONFIG_FILE="$HOME/.config/copy-app/config"
 HELPER_DIR="$HOME/.local/share/copy-app"
 HELPER_BIN="$HELPER_DIR/getwindowid"
 FIND_BIN="$HELPER_DIR/findelement"
+PRESS_BIN="$HELPER_DIR/pressbutton"
 SAVE_DIR=""
 APP_NAME=""
 TITLE_FILTER=""
@@ -54,7 +55,7 @@ mkdir -p "$APP_DIR"
 sleep 1.5
 SAVE_DIR="$APP_DIR" "$COPY_APP" "$APP_NAME" >/dev/null 2>&1
 LATEST=$(ls -t "$APP_DIR"/*.png 2>/dev/null | head -1)
-[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\\n💡 UI actions: copy-app $APP_NAME --type \\\"text\\\" | --keys \\\"cmd+n\\\" | --find \\\"text\\\" | --top | --newline | --delay N\"}}"
+[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\\n💡 UI actions: copy-app $APP_NAME --type \\\"text\\\" | --keys \\\"cmd+n\\\" | --press \\\"Button\\\" | --find \\\"text\\\" | --top | --newline\"}}"
 exit 0
 HOOKSCRIPT
     chmod +x "$HOOK_FILE"
@@ -288,6 +289,7 @@ Options:
   --newline                 Press Enter for new line
   --top                     Move to start of document (cmd+up)
   --find <text>             Move cursor to text location (accessibility API)
+  --press <button>          Click button by name (accessibility API)
   --save [on|off]           Enable/disable auto-save, or show status
   --apps [AppName]          List saved apps, or screenshots for an app
   --install-hook            Install Claude Code hook for xcodebuildmcp
@@ -452,6 +454,118 @@ SWIFT
     fi
 }
 
+# Build the button press helper
+ensure_press_helper() {
+    if [[ -x "$PRESS_BIN" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$HELPER_DIR"
+
+    cat > "$HELPER_DIR/pressbutton.swift" << 'SWIFT'
+import Cocoa
+import ApplicationServices
+
+// Usage: pressbutton <appName> <buttonTitle>
+// Finds and clicks a button/element by its title
+guard CommandLine.arguments.count >= 3 else {
+    print("USAGE_ERROR")
+    exit(1)
+}
+
+let appName = CommandLine.arguments[1]
+let buttonTitle = CommandLine.arguments[2]
+
+let runningApps = NSWorkspace.shared.runningApplications.filter { $0.localizedName == appName }
+guard let app = runningApps.first else { print("APP_NOT_FOUND"); exit(1) }
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+
+// Recursive function to find clickable element by title
+func findButton(in element: AXUIElement, matching title: String) -> AXUIElement? {
+    var value: CFTypeRef?
+    var role: CFTypeRef?
+
+    // Get role
+    AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
+    let roleStr = (role as? String) ?? ""
+
+    // Check title
+    if AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &value) == .success,
+       let str = value as? String, str.localizedCaseInsensitiveContains(title) {
+        // Found matching title - check if it's clickable
+        if roleStr == "AXButton" || roleStr == "AXMenuItem" || roleStr == "AXLink" ||
+           roleStr == "AXPopUpButton" || roleStr == "AXCheckBox" || roleStr == "AXRadioButton" {
+            return element
+        }
+    }
+
+    // Check description
+    if AXUIElementCopyAttributeValue(element, kAXDescriptionAttribute as CFString, &value) == .success,
+       let str = value as? String, str.localizedCaseInsensitiveContains(title) {
+        if roleStr == "AXButton" || roleStr == "AXImage" {
+            return element
+        }
+    }
+
+    // Recurse into children
+    var children: CFTypeRef?
+    if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success,
+       let childArray = children as? [AXUIElement] {
+        for child in childArray {
+            if let found = findButton(in: child, matching: title) {
+                return found
+            }
+        }
+    }
+
+    return nil
+}
+
+guard let button = findButton(in: appElement, matching: buttonTitle) else {
+    print("BUTTON_NOT_FOUND")
+    exit(1)
+}
+
+// Try AXPress action first (standard for buttons)
+if AXUIElementPerformAction(button, kAXPressAction as CFString) == .success {
+    print("OK")
+    exit(0)
+}
+
+// Fallback: click via mouse event
+var position: CFTypeRef?
+var size: CFTypeRef?
+
+guard AXUIElementCopyAttributeValue(button, kAXPositionAttribute as CFString, &position) == .success,
+      AXUIElementCopyAttributeValue(button, kAXSizeAttribute as CFString, &size) == .success else {
+    print("POSITION_ERROR")
+    exit(1)
+}
+
+var point = CGPoint.zero
+var dims = CGSize.zero
+AXValueGetValue(position as! AXValue, .cgPoint, &point)
+AXValueGetValue(size as! AXValue, .cgSize, &dims)
+
+let clickPoint = CGPoint(x: point.x + dims.width/2, y: point.y + dims.height/2)
+
+let mouseDown = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: clickPoint, mouseButton: .left)
+let mouseUp = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: clickPoint, mouseButton: .left)
+
+mouseDown?.post(tap: .cghidEventTap)
+usleep(50000)
+mouseUp?.post(tap: .cghidEventTap)
+
+print("OK")
+SWIFT
+
+    if ! swiftc "$HELPER_DIR/pressbutton.swift" -o "$PRESS_BIN" 2>/dev/null; then
+        echo "Error: Failed to compile press helper." >&2
+        exit 1
+    fi
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -495,6 +609,11 @@ while [[ $# -gt 0 ]]; do
         --find)
             [[ -z "$2" || "$2" == -* ]] && { echo "Error: --find requires search text." >&2; exit 1; }
             FIND_TEXT="$2"
+            shift 2
+            ;;
+        --press)
+            [[ -z "$2" || "$2" == -* ]] && { echo "Error: --press requires button name." >&2; exit 1; }
+            PRESS_BUTTON="$2"
             shift 2
             ;;
         --top)
@@ -595,13 +714,27 @@ if ! [[ "$window_id" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
+# Press button if specified (runs before other actions)
+if [[ -n "$PRESS_BUTTON" ]]; then
+    osascript -e "tell application \"$APP_NAME\" to activate" 2>/dev/null
+    sleep 0.3
+    ensure_press_helper
+    press_result=$("$PRESS_BIN" "$APP_NAME" "$PRESS_BUTTON" 2>&1)
+    if [[ "$press_result" != "OK" ]]; then
+        echo "Warning: Could not press '$PRESS_BUTTON' ($press_result)" >&2
+    fi
+    sleep "${ACTION_DELAY:-0.5}"
+fi
+
 # Perform action if specified
 if [[ -n "$ACTION_TYPE" ]]; then
     perform_action "$APP_NAME" "$ACTION_TYPE" "$ACTION_VALUE"
     # Wait after action (default 0.5s)
     sleep "${ACTION_DELAY:-0.5}"
+fi
 
-    # Re-query window ID after action (window state may have changed)
+# Re-query window ID if any action was performed
+if [[ -n "$PRESS_BUTTON" || -n "$ACTION_TYPE" ]]; then
     if [[ -n "$TITLE_FILTER" ]]; then
         window_id=$("$HELPER_BIN" "$APP_NAME" "$TITLE_FILTER" 2>&1)
     else

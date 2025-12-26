@@ -70,6 +70,10 @@ copy-app Finder --keys "cmd+shift+n"    # New folder
 # Click at coordinates
 copy-app MyApp --click "100,200"
 
+# Click buttons by name (uses accessibility API)
+copy-app Notes --press "New Note"
+copy-app Safari --press "Downloads"
+
 # Navigate to text and type there (uses macOS Accessibility API)
 copy-app Writer --find "Chapter 1" --type "DRAFT: "
 
@@ -139,7 +143,7 @@ When the hook fires, Claude sees the screenshot and can use UI automation to int
 
 ```
 📸 Screenshot: ~/copyMac/screenshots/MyApp/MyApp_2024-01-15_14-30-45.png
-💡 UI actions: copy-app MyApp --type "text" | --keys "cmd+n" | --find "text" | --top | --newline | --delay N
+💡 UI actions: copy-app MyApp --type "text" | --keys "cmd+n" | --press "Button" | --find "text" | --top | --newline
 ```
 
 This creates a feedback loop: launch app → screenshot → Claude analyzes → Claude interacts → new screenshot.
