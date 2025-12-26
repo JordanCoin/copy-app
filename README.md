@@ -6,7 +6,11 @@ Capture any macOS application window to your clipboard with a single command. No
 copy-app Safari
 ```
 
-![Example screenshot](example.png)
+**Before:** Your cluttered desktop
+![Before](before.png)
+
+**After:** Just the window you need, on your clipboard
+![After](example.png)
 
 The window is captured directly from its compositing layer - even if it's hidden behind other windows.
 
