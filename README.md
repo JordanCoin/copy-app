@@ -37,6 +37,11 @@ cd copy-app
 ./install.sh
 ```
 
+> **First run:** Grant Accessibility permission to your terminal when prompted.
+> System Settings → Privacy & Security → Accessibility → add your terminal app
+>
+> ![Accessibility settings](accessibility.png)
+
 ## Usage
 
 ```bash
