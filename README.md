@@ -1,6 +1,8 @@
 # copy-app
 
-Capture any macOS application window to your clipboard with a single command. No clicking, no dragging, no window switching.
+A native macOS CLI for capturing app windows and automating UI interactions. Single binary, no dependencies.
+
+Capture any application window to your clipboard with a single command. No clicking, no dragging, no window switching.
 
 ```bash
 copy-app Safari
@@ -34,7 +36,8 @@ curl -fsSL https://raw.githubusercontent.com/JordanCoin/copy-app/main/install.sh
 ```bash
 git clone https://github.com/JordanCoin/copy-app.git
 cd copy-app
-./install.sh
+swift build -c release
+cp .build/release/copy-app ~/.local/bin/
 ```
 
 > **First run:** Grant Accessibility permission to your terminal, then restart it.
@@ -104,27 +107,23 @@ Screenshots are organized by app: `~/copyMac/screenshots/<AppName>/AppName_2024-
 ## Requirements
 
 - **macOS 12+** (Monterey or later)
-- **Xcode Command Line Tools** - for compiling the Swift helper on first run
-  ```bash
-  xcode-select --install
-  ```
 
 ## How It Works
 
-1. A Swift helper queries `CGWindowListCopyWindowInfo` to find the window ID by app name
-2. `screencapture -l <windowid>` captures the window's composited image directly
-3. The image is copied to clipboard (and optionally saved to disk)
+A native Swift CLI that uses macOS APIs directly:
+1. `CGWindowListCopyWindowInfo` finds the window by app name
+2. `CGWindowListCreateImage` captures the window's composited image
+3. `NSPasteboard` copies to clipboard (and optionally saves to disk)
+4. `AXUIElement` accessibility API handles text navigation and button pressing
+5. `CGEvent` sends keystrokes and mouse clicks
 
-This captures the actual window content regardless of what's on top of it - no need to bring the window to front.
+The window is captured from its compositing layer - no need to bring it to front.
 
 ## Troubleshooting
 
 **"No capturable window found"**
 - Make sure the app is running and has at least one open window
 - Check the exact app name (use `copy-app "Google Chrome"` for Chrome)
-
-**"Failed to compile helper"**
-- Install Xcode Command Line Tools: `xcode-select --install`
 
 **Permission errors**
 - Grant Accessibility permission to your terminal app

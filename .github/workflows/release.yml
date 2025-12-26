@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., 0.2.0)'
+        description: 'Version to release (e.g., 0.3.0)'
         required: true
       release_type:
         description: 'Release type'
@@ -23,7 +23,28 @@ permissions:
   contents: write
 
 jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build for ${{ matrix.arch }}
+        run: |
+          swift build -c release --arch ${{ matrix.arch }}
+          cp .build/release/copy-app copy-app-${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: copy-app-${{ matrix.arch }}
+          path: copy-app-${{ matrix.arch }}
+
   release:
+    needs: build
     runs-on: macos-latest
     outputs:
       tag_name: ${{ steps.get_tag.outputs.tag }}
@@ -50,10 +71,20 @@ jobs:
           git tag ${{ steps.get_tag.outputs.tag }}
           git push origin ${{ steps.get_tag.outputs.tag }}
 
-      - name: Test script
+      - name: Download arm64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: copy-app-arm64
+
+      - name: Download x86_64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: copy-app-x86_64
+
+      - name: Test binary
         run: |
-          chmod +x copy-app.sh
-          ./copy-app.sh --help
+          chmod +x copy-app-arm64
+          ./copy-app-arm64 --help
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -61,7 +92,8 @@ jobs:
           tag_name: ${{ steps.get_tag.outputs.tag }}
           generate_release_notes: true
           files: |
-            copy-app.sh
+            copy-app-arm64
+            copy-app-x86_64
             install.sh
 
   update-homebrew:
@@ -83,7 +115,7 @@ jobs:
           curl -sL "https://github.com/JordanCoin/copy-app/archive/refs/tags/${TAG_NAME}.tar.gz" -o release.tar.gz
           SHA256=$(sha256sum release.tar.gz | cut -d ' ' -f 1)
 
-          # Update formula (formulas are in root, not Formula/)
+          # Update formula
           cd homebrew-tap
           sed -i "s|url \".*\"|url \"https://github.com/JordanCoin/copy-app/archive/refs/tags/${TAG_NAME}.tar.gz\"|" copy-app.rb
           sed -i "s|sha256 \".*\"|sha256 \"${SHA256}\"|" copy-app.rb

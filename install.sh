@@ -33,12 +33,26 @@ fi
 
 info "Installing copy-app..."
 
-# Download the script
 TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" EXIT
 
-curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/copy-app.sh" -o "$TEMP_DIR/copy-app"
-chmod +x "$TEMP_DIR/copy-app"
+# Determine architecture
+ARCH=$(uname -m)
+
+# Try downloading pre-built binary from latest release
+RELEASE_URL="https://github.com/${REPO}/releases/latest/download/copy-app-${ARCH}"
+if curl -fsSL "$RELEASE_URL" -o "$TEMP_DIR/copy-app" 2>/dev/null; then
+    info "Downloaded pre-built binary for ${ARCH}"
+    chmod +x "$TEMP_DIR/copy-app"
+else
+    # Fall back to building from source
+    info "Building from source..."
+    git clone --depth 1 "https://github.com/${REPO}.git" "$TEMP_DIR/repo"
+    cd "$TEMP_DIR/repo"
+    swift build -c release
+    cp .build/release/copy-app "$TEMP_DIR/copy-app"
+    cd - >/dev/null
+fi
 
 # Install to ~/.local/bin
 mkdir -p "$INSTALL_DIR"
