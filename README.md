@@ -13,7 +13,8 @@ The window is captured directly from its compositing layer - even if it's hidden
 ### Homebrew (recommended)
 
 ```bash
-brew install JordanCoin/tap/copy-app
+brew tap JordanCoin/tap
+brew install copy-app
 ```
 
 ### Quick Install

@@ -47,8 +47,8 @@ jobs:
           curl -sL "https://github.com/JordanCoin/copy-app/archive/refs/tags/${TAG_NAME}.tar.gz" -o release.tar.gz
           SHA256=$(sha256sum release.tar.gz | cut -d ' ' -f 1)
 
-          # Update formula
-          cd homebrew-tap/Formula
+          # Update formula (formulas are in root, not Formula/)
+          cd homebrew-tap
           sed -i "s|url \".*\"|url \"https://github.com/JordanCoin/copy-app/archive/refs/tags/${TAG_NAME}.tar.gz\"|" copy-app.rb
           sed -i "s|sha256 \".*\"|sha256 \"${SHA256}\"|" copy-app.rb
 
