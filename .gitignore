@@ -10,3 +10,4 @@
 *.o
 *.d
 *.log
+.codemap/watch.pid
