@@ -102,7 +102,7 @@ This captures the actual window content regardless of what's on top of it - no n
 
 ## Claude Code Integration
 
-Automatically screenshot apps when Claude launches them via [xcodebuildmcp](https://github.com/nicholascm/xcodebuildmcp):
+Automatically screenshot apps when Claude launches them via [XcodeBuildMCP](https://github.com/cameroncooke/XcodeBuildMCP):
 
 ```bash
 copy-app --install-hook    # Set up hook
