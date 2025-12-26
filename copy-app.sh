@@ -105,6 +105,51 @@ uninstall_hook() {
     fi
 }
 
+perform_action() {
+    local APP_NAME="$1"
+    local ACTION_TYPE="$2"
+    local ACTION_VALUE="$3"
+
+    # Activate the app first
+    osascript -e "tell application \"$APP_NAME\" to activate" 2>/dev/null
+    sleep 0.3
+
+    case "$ACTION_TYPE" in
+        type)
+            osascript -e "tell application \"System Events\" to keystroke \"$ACTION_VALUE\""
+            ;;
+        keys)
+            # Parse keys like "cmd+n", "cmd+shift+s"
+            local key_script=""
+            local using_mods=""
+
+            # Extract the main key (last part after +)
+            local main_key=$(echo "$ACTION_VALUE" | awk -F'+' '{print $NF}')
+
+            # Check for modifiers
+            [[ "$ACTION_VALUE" == *"cmd"* ]] && using_mods+="command down, "
+            [[ "$ACTION_VALUE" == *"shift"* ]] && using_mods+="shift down, "
+            [[ "$ACTION_VALUE" == *"alt"* || "$ACTION_VALUE" == *"opt"* ]] && using_mods+="option down, "
+            [[ "$ACTION_VALUE" == *"ctrl"* ]] && using_mods+="control down, "
+
+            # Remove trailing comma
+            using_mods=${using_mods%, }
+
+            if [[ -n "$using_mods" ]]; then
+                osascript -e "tell application \"System Events\" to keystroke \"$main_key\" using {$using_mods}"
+            else
+                osascript -e "tell application \"System Events\" to keystroke \"$main_key\""
+            fi
+            ;;
+        click)
+            # click x,y
+            local x=$(echo "$ACTION_VALUE" | cut -d',' -f1)
+            local y=$(echo "$ACTION_VALUE" | cut -d',' -f2)
+            osascript -e "tell application \"System Events\" to click at {$x, $y}"
+            ;;
+    esac
+}
+
 list_apps() {
     local SCREENSHOT_DIR="$HOME/copyMac/screenshots"
     local APP_NAME="$1"
@@ -216,6 +261,10 @@ Usage:
 
 Options:
   -t, --title <WindowTitle> Window title substring filter (optional)
+  --type <text>             Type text before capturing
+  --keys <combo>            Press key combo before capturing (e.g., cmd+n)
+  --click <x,y>             Click at coordinates before capturing
+  --delay <seconds>         Wait time after action (default: 0.5)
   --save [on|off]           Enable/disable auto-save, or show status
   --apps [AppName]          List saved apps, or screenshots for an app
   --install-hook            Install Claude Code hook for xcodebuildmcp
@@ -227,8 +276,9 @@ Examples:
   copy-app Writer                     # Capture Writer's frontmost window
   copy-app Safari                     # Capture Safari's frontmost window
   copy-app Terminal -t "server-log"   # Capture Terminal window matching title
+  copy-app Writer --type "Hello"      # Type text, then capture
+  copy-app Notes --keys "cmd+n"       # Press Cmd+N, then capture
   copy-app --save on                  # Enable auto-save to ~/copyMac/screenshots
-  copy-app --save off                 # Disable auto-save (clipboard only)
   copy-app --install-hook             # Set up Claude Code integration
 
   When SAVE_DIR is set, screenshots are saved with timestamps
@@ -323,6 +373,29 @@ while [[ $# -gt 0 ]]; do
             TITLE_FILTER="$2"
             shift 2
             ;;
+        --type)
+            [[ -z "$2" || "$2" == -* ]] && { echo "Error: --type requires a value." >&2; exit 1; }
+            ACTION_TYPE="type"
+            ACTION_VALUE="$2"
+            shift 2
+            ;;
+        --keys)
+            [[ -z "$2" || "$2" == -* ]] && { echo "Error: --keys requires a value." >&2; exit 1; }
+            ACTION_TYPE="keys"
+            ACTION_VALUE="$2"
+            shift 2
+            ;;
+        --click)
+            [[ -z "$2" || "$2" == -* ]] && { echo "Error: --click requires x,y coordinates." >&2; exit 1; }
+            ACTION_TYPE="click"
+            ACTION_VALUE="$2"
+            shift 2
+            ;;
+        --delay)
+            [[ -z "$2" || "$2" == -* ]] && { echo "Error: --delay requires seconds." >&2; exit 1; }
+            ACTION_DELAY="$2"
+            shift 2
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -415,6 +488,26 @@ esac
 if ! [[ "$window_id" =~ ^[0-9]+$ ]]; then
     echo "Error: Unexpected result: $window_id" >&2
     exit 1
+fi
+
+# Perform action if specified
+if [[ -n "$ACTION_TYPE" ]]; then
+    perform_action "$APP_NAME" "$ACTION_TYPE" "$ACTION_VALUE"
+    # Wait after action (default 0.5s)
+    sleep "${ACTION_DELAY:-0.5}"
+
+    # Re-query window ID after action (window state may have changed)
+    if [[ -n "$TITLE_FILTER" ]]; then
+        window_id=$("$HELPER_BIN" "$APP_NAME" "$TITLE_FILTER" 2>&1)
+    else
+        window_id=$("$HELPER_BIN" "$APP_NAME" 2>&1)
+    fi
+
+    # Validate the new window ID
+    if ! [[ "$window_id" =~ ^[0-9]+$ ]]; then
+        echo "Error: Could not find window after action." >&2
+        exit 1
+    fi
 fi
 
 # Capture the window
