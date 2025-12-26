@@ -55,6 +55,36 @@ copy-app Terminal -t "server-log"
 copy-app Safari -t "GitHub"
 ```
 
+## UI Automation
+
+Perform actions before capturing - type text, press keys, click, or navigate to specific text:
+
+```bash
+# Type text into the app
+copy-app Writer --type "Hello world"
+
+# Press key combinations
+copy-app Notes --keys "cmd+n"           # New note
+copy-app Finder --keys "cmd+shift+n"    # New folder
+
+# Click at coordinates
+copy-app MyApp --click "100,200"
+
+# Navigate to text and type there (uses macOS Accessibility API)
+copy-app Writer --find "Chapter 1" --type "DRAFT: "
+
+# Move to start of document
+copy-app Writer --top --type "Title here"
+
+# Add a new line before typing
+copy-app Notes --newline --type "New paragraph"
+
+# Add delay after action (default 0.5s)
+copy-app Writer --type "slow" --delay 2
+```
+
+The `--find` option uses the macOS Accessibility API to locate text in the focused text area and position the cursor there - no visible find dialog, works behind the scenes.
+
 ## Auto-Save Screenshots
 
 By default, screenshots are only copied to clipboard. To also save them to disk:
@@ -105,9 +135,14 @@ copy-app --install-hook    # Set up hook
 copy-app --uninstall-hook  # Remove hook
 ```
 
-This sets up a Claude Code hook so when xcodebuildmcp launches your app, copy-app captures a screenshot and Claude can view it with the Read tool.
+When the hook fires, Claude sees the screenshot and can use UI automation to interact with your app:
 
-Screenshots are organized by app: `~/copyMac/screenshots/<AppName>/`.
+```
+📸 Screenshot: ~/copyMac/screenshots/MyApp/MyApp_2024-01-15_14-30-45.png
+💡 UI actions: copy-app MyApp --type "text" | --keys "cmd+n" | --find "text" | --top | --newline | --delay N
+```
+
+This creates a feedback loop: launch app → screenshot → Claude analyzes → Claude interacts → new screenshot.
 
 ## License
 
