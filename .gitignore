@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Build artifacts (Swift helper is built locally by users)
+*.o
+*.d
+*.log
