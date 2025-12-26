@@ -53,7 +53,7 @@ mkdir -p "$APP_DIR"
 sleep 1.5
 SAVE_DIR="$APP_DIR" "$COPY_APP" "$APP_NAME" >/dev/null 2>&1
 LATEST=$(ls -t "$APP_DIR"/*.png 2>/dev/null | head -1)
-[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\\n💡 UI actions available: copy-app $APP_NAME --type \\\"text\\\" | --keys \\\"cmd+n\\\" | --click \\\"x,y\\\" (use --delay N to wait)\"}}"
+[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\\n💡 UI actions: copy-app $APP_NAME --type \\\"text\\\" | --keys \\\"cmd+n\\\" | --click \\\"x,y\\\" | --newline (start at top) | --delay N\"}}"
 exit 0
 HOOKSCRIPT
     chmod +x "$HOOK_FILE"
@@ -116,9 +116,11 @@ perform_action() {
 
     case "$ACTION_TYPE" in
         type)
-            # Move to start of document first (cmd+up) for predictable insertion
-            osascript -e "tell application \"System Events\" to key code 126 using {command down}"
-            sleep 0.1
+            # Optionally move to start of document first (cmd+up)
+            if [[ "$NEWLINE_FIRST" == "true" ]]; then
+                osascript -e "tell application \"System Events\" to key code 126 using {command down}"
+                sleep 0.1
+            fi
             osascript -e "tell application \"System Events\" to keystroke \"$ACTION_VALUE\""
             ;;
         keys)
@@ -268,6 +270,7 @@ Options:
   --keys <combo>            Press key combo before capturing (e.g., cmd+n)
   --click <x,y>             Click at coordinates before capturing
   --delay <seconds>         Wait time after action (default: 0.5)
+  --newline                 Move to start of document before typing (cmd+up)
   --save [on|off]           Enable/disable auto-save, or show status
   --apps [AppName]          List saved apps, or screenshots for an app
   --install-hook            Install Claude Code hook for xcodebuildmcp
@@ -279,7 +282,8 @@ Examples:
   copy-app Writer                     # Capture Writer's frontmost window
   copy-app Safari                     # Capture Safari's frontmost window
   copy-app Terminal -t "server-log"   # Capture Terminal window matching title
-  copy-app Writer --type "Hello"      # Type text, then capture
+  copy-app Writer --type "Hello"      # Type text at cursor, then capture
+  copy-app Writer --type "/" --newline # Start at top, type, capture
   copy-app Notes --keys "cmd+n"       # Press Cmd+N, then capture
   copy-app --save on                  # Enable auto-save to ~/copyMac/screenshots
   copy-app --install-hook             # Set up Claude Code integration
@@ -398,6 +402,10 @@ while [[ $# -gt 0 ]]; do
             [[ -z "$2" || "$2" == -* ]] && { echo "Error: --delay requires seconds." >&2; exit 1; }
             ACTION_DELAY="$2"
             shift 2
+            ;;
+        --newline)
+            NEWLINE_FIRST="true"
+            shift
             ;;
         -h|--help)
             show_help
