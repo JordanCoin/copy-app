@@ -116,6 +116,9 @@ perform_action() {
 
     case "$ACTION_TYPE" in
         type)
+            # Move to start of document first (cmd+up) for predictable insertion
+            osascript -e "tell application \"System Events\" to key code 126 using {command down}"
+            sleep 0.1
             osascript -e "tell application \"System Events\" to keystroke \"$ACTION_VALUE\""
             ;;
         keys)
