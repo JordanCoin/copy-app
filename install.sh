@@ -5,7 +5,7 @@
 set -e
 
 REPO="JordanCoin/copy-app"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="$HOME/.local/bin"
 SCRIPT_NAME="copy-app"
 
 # Colors
@@ -40,12 +40,16 @@ trap "rm -rf $TEMP_DIR" EXIT
 curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/copy-app.sh" -o "$TEMP_DIR/copy-app"
 chmod +x "$TEMP_DIR/copy-app"
 
-# Install to /usr/local/bin (may need sudo)
-if [[ -w "$INSTALL_DIR" ]]; then
-    mv "$TEMP_DIR/copy-app" "$INSTALL_DIR/$SCRIPT_NAME"
-else
-    info "Installing to $INSTALL_DIR (requires sudo)..."
-    sudo mv "$TEMP_DIR/copy-app" "$INSTALL_DIR/$SCRIPT_NAME"
+# Install to ~/.local/bin
+mkdir -p "$INSTALL_DIR"
+mv "$TEMP_DIR/copy-app" "$INSTALL_DIR/$SCRIPT_NAME"
+
+# Check if ~/.local/bin is in PATH
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    warn "Add ~/.local/bin to your PATH:"
+    echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+    echo "  source ~/.zshrc"
+    echo ""
 fi
 
 info "Installed successfully!"
@@ -56,3 +60,16 @@ echo "  copy-app Terminal -t log  # Capture Terminal with 'log' in title"
 echo ""
 warn "Note: Grant Accessibility permission to your terminal on first run."
 echo "      System Settings → Privacy & Security → Accessibility"
+echo ""
+
+# Ask about Claude Code hook (only if interactive)
+if [[ -t 0 ]]; then
+    read -p "$(echo -e "${GREEN}==>${NC} Set up Claude Code integration? [y/N] ")" -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        "$INSTALL_DIR/$SCRIPT_NAME" --install-hook
+    fi
+else
+    echo "For Claude Code integration:"
+    echo "  copy-app --install-hook"
+fi

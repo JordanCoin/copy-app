@@ -50,10 +50,10 @@ By default, screenshots are only copied to clipboard. To also save them to disk:
 
 ```bash
 mkdir -p ~/.config/copy-app
-echo 'SAVE_DIR=~/Screenshots/copy-app' > ~/.config/copy-app/config
+echo 'SAVE_DIR=~/copyMac/screenshots' > ~/.config/copy-app/config
 ```
 
-Screenshots will be saved as `AppName_2024-01-15_14-30-45.png` and copied to clipboard.
+Screenshots are organized by app: `~/copyMac/screenshots/<AppName>/AppName_2024-01-15_14-30-45.png`
 
 ## Requirements
 
@@ -93,6 +93,19 @@ This captures the actual window content regardless of what's on top of it - no n
 **Permission errors**
 - Grant Accessibility permission to your terminal app
 - Fully quit and restart your terminal after granting permission
+
+## Claude Code Integration
+
+Automatically screenshot apps when Claude launches them via xcodebuildmcp:
+
+```bash
+copy-app --install-hook    # Set up hook
+copy-app --uninstall-hook  # Remove hook
+```
+
+This sets up a Claude Code hook so when xcodebuildmcp launches your app, copy-app captures a screenshot and Claude can view it with the Read tool.
+
+Screenshots are organized by app: `~/copyMac/screenshots/<AppName>/`.
 
 ## License
 

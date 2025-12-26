@@ -13,10 +13,96 @@ SAVE_DIR=""
 APP_NAME=""
 TITLE_FILTER=""
 
-# Load config if exists
+# Preserve env var if set, then load config
+ENV_SAVE_DIR="$SAVE_DIR"
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 fi
+# Environment variable takes precedence over config
+[[ -n "$ENV_SAVE_DIR" ]] && SAVE_DIR="$ENV_SAVE_DIR"
+
+install_hook() {
+    local HOOK_DIR="$HOME/.claude/hooks"
+    local HOOK_FILE="$HOOK_DIR/screenshot-app.sh"
+    local SETTINGS="$HOME/.claude/settings.json"
+    local SCREENSHOT_DIR="$HOME/copyMac/screenshots"
+
+    mkdir -p "$HOOK_DIR" "$SCREENSHOT_DIR"
+
+    # Create hook script
+    cat > "$HOOK_FILE" << 'HOOKSCRIPT'
+#!/bin/bash
+COPY_APP=$(command -v copy-app 2>/dev/null)
+[[ -z "$COPY_APP" ]] && exit 0
+SCREENSHOT_DIR="$HOME/copyMac/screenshots"
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
+APP_NAME=""
+case "$TOOL_NAME" in
+    mcp__xcodebuildmcp__launch_mac_app)
+        APP_PATH=$(echo "$INPUT" | jq -r '.tool_input.appPath // empty')
+        [[ -n "$APP_PATH" ]] && APP_NAME=$(basename "$APP_PATH" .app);;
+    mcp__xcodebuildmcp__build_run_macos|mcp__xcodebuildmcp__build_run_sim)
+        APP_PATH=$(echo "$INPUT" | jq -r '.tool_response | tostring' 2>/dev/null | grep -oE '[^/]+\.app' | head -1 | sed 's/\.app$//')
+        [[ -n "$APP_PATH" ]] && APP_NAME="$APP_PATH";;
+esac
+[[ -z "$APP_NAME" ]] && exit 0
+APP_DIR="$SCREENSHOT_DIR/$APP_NAME"
+mkdir -p "$APP_DIR"
+sleep 1.5
+SAVE_DIR="$APP_DIR" "$COPY_APP" "$APP_NAME" >/dev/null 2>&1
+LATEST=$(ls -t "$APP_DIR"/*.png 2>/dev/null | head -1)
+[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\"}}"
+exit 0
+HOOKSCRIPT
+    chmod +x "$HOOK_FILE"
+
+    # Set up config for auto-save
+    mkdir -p "$HOME/.config/copy-app"
+    echo "SAVE_DIR=$SCREENSHOT_DIR" > "$HOME/.config/copy-app/config"
+
+    # Add hook to settings.json if not already present
+    if [[ -f "$SETTINGS" ]] && command -v jq &>/dev/null; then
+        if ! grep -q "screenshot-app.sh" "$SETTINGS"; then
+            local HOOK_ENTRY='{"matcher":"mcp__xcodebuildmcp__launch_mac_app|mcp__xcodebuildmcp__build_run_macos|mcp__xcodebuildmcp__build_run_sim","hooks":[{"type":"command","command":"bash ~/.claude/hooks/screenshot-app.sh"}]}'
+            jq ".hooks.PostToolUse += [$HOOK_ENTRY]" "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+            echo "✓ Hook added to settings.json"
+        else
+            echo "✓ Hook already configured in settings.json"
+        fi
+    elif [[ ! -f "$SETTINGS" ]]; then
+        echo "⚠️  Create ~/.claude/settings.json with the hook config (see README)"
+    fi
+
+    echo "✓ Hook installed: $HOOK_FILE"
+    echo "✓ Screenshots will save to: $SCREENSHOT_DIR"
+}
+
+uninstall_hook() {
+    local HOOK_FILE="$HOME/.claude/hooks/screenshot-app.sh"
+    local CONFIG_FILE="$HOME/.config/copy-app/config"
+    local SETTINGS="$HOME/.claude/settings.json"
+
+    if [[ -f "$HOOK_FILE" ]]; then
+        rm "$HOOK_FILE"
+        echo "✓ Hook removed: $HOOK_FILE"
+    else
+        echo "Hook not found: $HOOK_FILE"
+    fi
+
+    if [[ -f "$CONFIG_FILE" ]]; then
+        rm "$CONFIG_FILE"
+        echo "✓ Config removed: $CONFIG_FILE"
+    fi
+
+    # Remove hook entry from settings.json
+    if [[ -f "$SETTINGS" ]] && command -v jq &>/dev/null; then
+        if grep -q "screenshot-app.sh" "$SETTINGS"; then
+            jq 'del(.hooks.PostToolUse[] | select(.hooks[]?.command | contains("screenshot-app.sh")))' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+            echo "✓ Hook entry removed from settings.json"
+        fi
+    fi
+}
 
 show_help() {
     cat << 'HELP'
@@ -26,15 +112,20 @@ Description:
 
 Usage:
   copy-app <AppName> [-t <WindowTitle>]
+  copy-app --install-hook | --uninstall-hook
 
 Options:
   -t, --title <WindowTitle> Window title substring filter (optional)
+  --install-hook            Install Claude Code hook for xcodebuildmcp
+  --uninstall-hook          Remove Claude Code hook and config
   -h, --help                Show this help message
 
 Examples:
   copy-app Writer                     # Capture Writer's frontmost window
   copy-app Safari                     # Capture Safari's frontmost window
   copy-app Terminal -t "server-log"   # Capture Terminal window matching title
+  copy-app --install-hook             # Set up Claude Code integration
+  copy-app --uninstall-hook           # Remove Claude Code integration
 
 Configuration:
   Create ~/.config/copy-app/config to enable auto-save:
@@ -137,6 +228,14 @@ while [[ $# -gt 0 ]]; do
             show_help
             exit 0
             ;;
+        --install-hook)
+            install_hook
+            exit 0
+            ;;
+        --uninstall-hook)
+            uninstall_hook
+            exit 0
+            ;;
         -*)
             echo "Error: Unknown option: $1" >&2
             echo "Use --help for usage information." >&2
@@ -211,16 +310,19 @@ fi
 if [[ -n "$SAVE_DIR" ]]; then
     # Save to file AND copy to clipboard
 
-    # Create save directory if needed
-    if [[ ! -d "$SAVE_DIR" ]]; then
-        mkdir -p "$SAVE_DIR" || { echo "Error: Failed to create directory: $SAVE_DIR" >&2; exit 1; }
+    # Organize by app: SAVE_DIR/AppName/AppName_timestamp.png
+    safe_app_name="${APP_NAME//[^a-zA-Z0-9_-]/_}"
+    app_dir="$SAVE_DIR/$safe_app_name"
+
+    # Create app directory if needed
+    if [[ ! -d "$app_dir" ]]; then
+        mkdir -p "$app_dir" || { echo "Error: Failed to create directory: $app_dir" >&2; exit 1; }
     fi
 
     # Generate filename: AppName_2024-01-15_14-30-45.png
     timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
-    safe_app_name="${APP_NAME//[^a-zA-Z0-9_-]/_}"
     filename="${safe_app_name}_${timestamp}.png"
-    filepath="$SAVE_DIR/$filename"
+    filepath="$app_dir/$filename"
 
     # Capture window to file
     if screencapture -l"$window_id" "$filepath" 2>/dev/null; then
