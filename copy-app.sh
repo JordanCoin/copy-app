@@ -9,6 +9,7 @@
 CONFIG_FILE="$HOME/.config/copy-app/config"
 HELPER_DIR="$HOME/.local/share/copy-app"
 HELPER_BIN="$HELPER_DIR/getwindowid"
+FIND_BIN="$HELPER_DIR/findelement"
 SAVE_DIR=""
 APP_NAME=""
 TITLE_FILTER=""
@@ -53,7 +54,7 @@ mkdir -p "$APP_DIR"
 sleep 1.5
 SAVE_DIR="$APP_DIR" "$COPY_APP" "$APP_NAME" >/dev/null 2>&1
 LATEST=$(ls -t "$APP_DIR"/*.png 2>/dev/null | head -1)
-[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\\n💡 UI actions: copy-app $APP_NAME --type \\\"text\\\" | --keys \\\"cmd+n\\\" | --click \\\"x,y\\\" | --newline (start at top) | --delay N\"}}"
+[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\\n💡 UI actions: copy-app $APP_NAME --type \\\"text\\\" | --keys \\\"cmd+n\\\" | --find \\\"text\\\" | --top | --newline | --delay N\"}}"
 exit 0
 HOOKSCRIPT
     chmod +x "$HOOK_FILE"
@@ -116,9 +117,23 @@ perform_action() {
 
     case "$ACTION_TYPE" in
         type)
-            # Optionally move to start of document first (cmd+up)
-            if [[ "$NEWLINE_FIRST" == "true" ]]; then
+            # --find: use accessibility API to move cursor to text
+            if [[ -n "$FIND_TEXT" ]]; then
+                ensure_find_helper
+                local find_result=$("$FIND_BIN" "$APP_NAME" "$FIND_TEXT" 2>&1)
+                if [[ "$find_result" != "OK" ]]; then
+                    echo "Warning: Could not find '$FIND_TEXT' ($find_result)" >&2
+                fi
+                sleep 0.2
+            fi
+            # --top: move to start of document (cmd+up)
+            if [[ "$TOP_FIRST" == "true" ]]; then
                 osascript -e "tell application \"System Events\" to key code 126 using {command down}"
+                sleep 0.1
+            fi
+            # --newline: press Enter for new line
+            if [[ "$NEWLINE_FLAG" == "true" ]]; then
+                osascript -e "tell application \"System Events\" to key code 36"
                 sleep 0.1
             fi
             osascript -e "tell application \"System Events\" to keystroke \"$ACTION_VALUE\""
@@ -270,7 +285,9 @@ Options:
   --keys <combo>            Press key combo before capturing (e.g., cmd+n)
   --click <x,y>             Click at coordinates before capturing
   --delay <seconds>         Wait time after action (default: 0.5)
-  --newline                 Move to start of document before typing (cmd+up)
+  --newline                 Press Enter for new line
+  --top                     Move to start of document (cmd+up)
+  --find <text>             Move cursor to text location (accessibility API)
   --save [on|off]           Enable/disable auto-save, or show status
   --apps [AppName]          List saved apps, or screenshots for an app
   --install-hook            Install Claude Code hook for xcodebuildmcp
@@ -282,8 +299,9 @@ Examples:
   copy-app Writer                     # Capture Writer's frontmost window
   copy-app Safari                     # Capture Safari's frontmost window
   copy-app Terminal -t "server-log"   # Capture Terminal window matching title
-  copy-app Writer --type "Hello"      # Type text at cursor, then capture
-  copy-app Writer --type "/" --newline # Start at top, type, capture
+  copy-app Writer --type "Hello"                    # Type at cursor
+  copy-app Writer --type "/" --top                  # Start at top, then type
+  copy-app Writer --find "Chapter 1" --type "NEW"   # Find text, type there
   copy-app Notes --keys "cmd+n"       # Press Cmd+N, then capture
   copy-app --save on                  # Enable auto-save to ~/copyMac/screenshots
   copy-app --install-hook             # Set up Claude Code integration
@@ -367,6 +385,73 @@ SWIFT
     fi
 }
 
+# Build the text finder helper (uses accessibility API to set cursor position)
+ensure_find_helper() {
+    if [[ -x "$FIND_BIN" ]]; then
+        return 0
+    fi
+
+    mkdir -p "$HELPER_DIR"
+
+    cat > "$HELPER_DIR/findelement.swift" << 'SWIFT'
+import Cocoa
+import ApplicationServices
+
+// Usage: findelement <appName> <searchText>
+// Sets cursor position to the search text location in the focused text area
+guard CommandLine.arguments.count >= 3 else {
+    print("USAGE_ERROR")
+    exit(1)
+}
+
+let appName = CommandLine.arguments[1]
+let searchText = CommandLine.arguments[2]
+
+let runningApps = NSWorkspace.shared.runningApplications.filter { $0.localizedName == appName }
+guard let app = runningApps.first else { print("APP_NOT_FOUND"); exit(1) }
+
+let appElement = AXUIElementCreateApplication(app.processIdentifier)
+
+// Get focused element (the text area)
+var focusedElement: CFTypeRef?
+guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success else {
+    print("NO_FOCUSED_ELEMENT"); exit(1)
+}
+
+let textElement = focusedElement as! AXUIElement
+
+// Get text content
+var value: CFTypeRef?
+guard AXUIElementCopyAttributeValue(textElement, kAXValueAttribute as CFString, &value) == .success,
+      let text = value as? String else {
+    print("NO_TEXT"); exit(1)
+}
+
+// Find search text position
+guard let range = text.range(of: searchText, options: .caseInsensitive) else {
+    print("TEXT_NOT_FOUND"); exit(1)
+}
+
+let position = text.distance(from: text.startIndex, to: range.lowerBound)
+
+// Set cursor position using AXSelectedTextRange
+var rangeValue = CFRange(location: position, length: 0)
+let axRange = AXValueCreate(.cfRange, &rangeValue)
+
+let result = AXUIElementSetAttributeValue(textElement, kAXSelectedTextRangeAttribute as CFString, axRange!)
+if result == .success {
+    print("OK")
+} else {
+    print("CURSOR_FAILED")
+}
+SWIFT
+
+    if ! swiftc "$HELPER_DIR/findelement.swift" -o "$FIND_BIN" 2>/dev/null; then
+        echo "Error: Failed to compile find helper." >&2
+        exit 1
+    fi
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -404,7 +489,16 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --newline)
-            NEWLINE_FIRST="true"
+            NEWLINE_FLAG="true"
+            shift
+            ;;
+        --find)
+            [[ -z "$2" || "$2" == -* ]] && { echo "Error: --find requires search text." >&2; exit 1; }
+            FIND_TEXT="$2"
+            shift 2
+            ;;
+        --top)
+            TOP_FIRST="true"
             shift
             ;;
         -h|--help)
