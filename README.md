@@ -7,10 +7,10 @@ copy-app Safari
 ```
 
 **Before:** Your cluttered desktop
-![Before](before.png)
+![Before](assets/before.png)
 
 **After:** Just the window you need, on your clipboard
-![After](example.png)
+![After](assets/example.png)
 
 The window is captured directly from its compositing layer - even if it's hidden behind other windows.
 
@@ -40,7 +40,7 @@ cd copy-app
 > **First run:** Grant Accessibility permission to your terminal, then restart it.
 > System Settings → Privacy & Security → Accessibility → add your terminal app
 >
-> ![Accessibility settings](accessibility.png)
+> ![Accessibility settings](assets/accessibility.png)
 
 ## Usage
 
