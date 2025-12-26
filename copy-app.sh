@@ -53,7 +53,7 @@ mkdir -p "$APP_DIR"
 sleep 1.5
 SAVE_DIR="$APP_DIR" "$COPY_APP" "$APP_NAME" >/dev/null 2>&1
 LATEST=$(ls -t "$APP_DIR"/*.png 2>/dev/null | head -1)
-[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\"}}"
+[[ -n "$LATEST" && -f "$LATEST" ]] && echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"📸 Screenshot: $LATEST\\n💡 UI actions available: copy-app $APP_NAME --type \\\"text\\\" | --keys \\\"cmd+n\\\" | --click \\\"x,y\\\" (use --delay N to wait)\"}}"
 exit 0
 HOOKSCRIPT
     chmod +x "$HOOK_FILE"
