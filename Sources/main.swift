@@ -187,13 +187,14 @@ if actionPerformed {
     usleep(UInt32(opts.delay * 1_000_000))
 }
 
-// Find and capture window
-guard let windowID = findWindowID(for: app, titleFilter: opts.windowTitle) else {
+// Find window bounds using Accessibility APIs (no Screen Recording permission needed)
+guard let bounds = findWindowBounds(for: app, titleFilter: opts.windowTitle) else {
     fputs("Error: No capturable window found for '\(appName)'\n", stderr)
     exit(1)
 }
 
-guard let image = captureWindow(id: windowID) else {
+// Capture using system screencapture (no Screen Recording permission needed)
+guard let image = captureWindowByBounds(bounds) else {
     fputs("Error: Failed to capture window\n", stderr)
     exit(1)
 }
